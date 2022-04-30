@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"preppy/core"
 	"sort"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// TODO; Split into multiple files/functions
 var rootCmd = &cobra.Command{
 	Use:   "preppy",
 	Short: "A command line tool to manage prerequisites for your python project",
@@ -101,6 +103,7 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		preIdentified, oldRequirements, _ := core.ReadExistingRequirements(root)
 		var requirements string
 		var versioned []string
 		var unversioned []string
@@ -109,13 +112,19 @@ var rootCmd = &cobra.Command{
 			if _, ok := stdLib[import_]; ok {
 				continue
 			}
-			// Rule 2: If import is in folders and not in pip, skip
+			// Rule 2: Replace '_' with '-'
+			import_ = strings.Replace(import_, "_", "-", -1)
+			// Rule 3: If import is in pre-identified, skip
+			if _, ok := preIdentified[import_]; ok {
+				continue
+			}
+			// Rule 4: If import is in folders and not in pip, skip
 			version, installed := preInstalled[import_]
 			_, ok := folders[import_]
 			if ok && !installed {
 				continue
 			}
-			// Rule 3: If import is in pip, add to requirements with version
+			// Rule 5: If import is in pip, add to requirements with version
 			if installed {
 				// Split version by '.'
 				versionSplit := strings.Split(version, ".")
@@ -144,7 +153,13 @@ var rootCmd = &cobra.Command{
 		if dryRun {
 			fmt.Println(requirements)
 		} else {
-			err = ioutil.WriteFile("./requirements.txt", []byte(requirements), 0644)
+			// If oldRequirements is not empty, append to it
+			if oldRequirements != "" {
+				mark := "\n# preppy-generated-requirements\n"
+				requirements = oldRequirements + mark + requirements
+			}
+			// Write requirements to file
+			err = ioutil.WriteFile(filepath.Join(root, "requirements.txt"), []byte(requirements), 0644)
 			if err != nil {
 				fmt.Println("Error writing requirements.txt")
 				return
