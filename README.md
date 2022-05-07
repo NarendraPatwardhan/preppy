@@ -48,7 +48,7 @@ Optional Flags:
 However, it aims to have following capabilities in the near future:
 
 - [x] Add support to parse pre-existing `requirements.txt` files and selectively update dependencies.
-- [ ] Parsing precommit hooks for dev dependencies.
+- [x] Parsing precommit hooks for dev dependencies.
 - [ ] Support for loading packages from Conda instead of pip.
 - [ ] Add support for specifying virtual environment using `-e` flag.
 

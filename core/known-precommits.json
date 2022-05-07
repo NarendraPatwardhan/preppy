@@ -1,0 +1,7 @@
+{
+    "black": true,
+    "isort": true,
+    "flake8": true,
+    "nbstripout": true,
+    "docformatter": true
+}

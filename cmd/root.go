@@ -24,6 +24,7 @@ var rootCmd = &cobra.Command{
 			root, _ = os.Getwd()
 		}
 		dryRun := cmd.Flag("dry-run").Value.String() == "true"
+
 		paths, folders, err := core.GetRecursivePaths(root)
 		if err != nil {
 			fmt.Println("Error walking the directory tree")
@@ -33,11 +34,13 @@ var rootCmd = &cobra.Command{
 			fmt.Println("No python files found")
 			return
 		}
+
 		var wg sync.WaitGroup
 		// Create a channel to receive the results.
-		importCh := make(chan []string, len(paths))
+		importCh := make(chan []string, len(paths)+1)
 		// Create a channel to receive the errors.
-		errCh := make(chan error, len(paths))
+		errCh := make(chan error, len(paths)+1)
+
 		for _, path := range paths {
 			wg.Add(1)
 			go func(path string) {
@@ -58,10 +61,23 @@ var rootCmd = &cobra.Command{
 				importCh <- imports
 			}(path)
 		}
+
+		wg.Add(1)
+		go func(root string) {
+			defer wg.Done()
+			preCommits, err := core.GetDevDependencies(root)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			importCh <- preCommits
+		}(root)
+
 		// Create a channel to receive the pip packages.
 		preInstalledCh := make(chan map[string]string, 1)
 		// Create a channel to receive the errors.
 		preInstalledErrCh := make(chan error, 1)
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -72,6 +88,7 @@ var rootCmd = &cobra.Command{
 			}
 			preInstalledCh <- preInstalled
 		}()
+
 		// Wait for all goroutines to finish.
 		wg.Wait()
 		// Close the channels.
@@ -79,12 +96,14 @@ var rootCmd = &cobra.Command{
 		close(errCh)
 		close(preInstalledCh)
 		close(preInstalledErrCh)
+
 		// Collect the results.
 		stdLib, err := core.GetSystemPackages()
 		if err != nil {
 			fmt.Println("Error loading system packages")
 			return
 		}
+
 		err = <-errCh
 		if err != nil {
 			fmt.Println("Error parsing file(s)")
@@ -96,6 +115,7 @@ var rootCmd = &cobra.Command{
 			return
 		}
 		preInstalled := <-preInstalledCh
+
 		uniqueImports := make(map[string]bool)
 		for imports := range importCh {
 			for _, import_ := range imports {
@@ -142,6 +162,7 @@ var rootCmd = &cobra.Command{
 				unversioned = append(unversioned, import_)
 			}
 		}
+
 		// Sort versioned
 		sort.Strings(versioned)
 		// Sort unversioned
@@ -150,6 +171,7 @@ var rootCmd = &cobra.Command{
 		requirements = strings.Join(versioned, "\n")
 		requirements += "\n"
 		requirements += strings.Join(unversioned, "\n")
+
 		if dryRun {
 			fmt.Println(requirements)
 		} else {
